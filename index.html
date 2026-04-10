@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Книга рецептів</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            min-height: 100%;
+            font-family: Arial, sans-serif;
+            background-color: #101010;
+            overflow-x: hidden;
+        }
+        body { position: relative; }
+        input, select, textarea, button { font: inherit; }
+        input, textarea { overflow-x: hidden; }
+        textarea {
+            scrollbar-width: thin;
+            scrollbar-color: #65a30d #18181b;
+        }
+        textarea::-webkit-scrollbar { width: 10px; }
+        textarea::-webkit-scrollbar-track {
+            background: #18181b;
+            border-radius: 10px;
+        }
+        textarea::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #84c71d 0%, #5f9c13 100%);
+            border-radius: 10px;
+            border: 2px solid #18181b;
+        }
+        textarea::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #9fe12f 0%, #6fb619 100%);
+        }
+    </style>
+</head>
+<body>
+
+<button onclick="downloadAppPackage()" style="
+position:fixed;
+top:14px;
+left:14px;
+z-index:9999;
+padding:10px 16px;
+border-radius:12px;
+border:1px solid rgba(210,255,130,0.4);
+background:linear-gradient(135deg,#84c71d,#5f9c13);
+color:#f7ffe3;
+font-weight:bold;
+cursor:pointer;
+box-shadow:0 6px 18px rgba(0,0,0,0.35);
+">
+Скачати додаток
+</button>
+
+<div id="root"></div>
+
+<script type="text/babel">
+  const baseRecipes = [
+    {
+      key: "smoothie",
+      category: "Напій",
+      title: "Смузі з авокадо та шпинатом",
+      image:
+        "https://hotuy.cooking/wp-content/uploads/2025/09/xzelenyi-kokteil-1200x720.jpg.pagespeed.ic.ZLBSUt8xJ5.webp",
+      ingredients: ["1 авокадо", "1 склянка шпинату", "1 банан", "1 склянка води"],
+      instructions: "Змішайте всі інгредієнти у блендері до однорідної маси.",
+      removable: false,
+    },
+    {
+      key: "quinoa",
+      category: "Їжа",
+      title: "Кіноа з овочами",
+      image:
+        "https://pepperandsalt.kz/wp-content/uploads/2025/07/kinoa-s-ovoshchami-recept-1024x684.jpg",
+      ingredients: [
+        "100 г кіноа",
+        "1 болгарський перець",
+        "1 морква",
+        "оливкова олія",
+      ],
+      instructions:
+        "Відваріть кіноа. Обсмажте овочі на оливковій олії. Змішайте все разом.",
+      removable: false,
+    },
+    {
+      key: "oatmeal",
+      category: "Десерт",
+      title: "Вівсянка з ягодами",
+      image:
+        "https://assets.livinn.lt/fit-in/465x465/7f/ea/9c/avizine-kose-min.jpeg",
+      ingredients: [
+        "100 г вівсянки",
+        "1 склянка мигдального молока",
+        "жменя ягід",
+        "мед за смаком",
+      ],
+      instructions:
+        "Приготуйте вівсянку на мигдальному молоці, додайте ягоди та мед.",
+      removable: false,
+    },
+  ];
+
+  function App() {
+    const [userRecipes, setUserRecipes] = React.useState(() => {
+      try {
+        const savedRecipes = localStorage.getItem("recipe_book_user_recipes");
+        return savedRecipes ? JSON.parse(savedRecipes) : [];
+      } catch (error) {
+        console.error("Не вдалося завантажити збереження рецептів", error);
+        return [];
+      }
+    });
+    const [showUserRecipes, setShowUserRecipes] = React.useState(false);
+    const [search, setSearch] = React.useState("");
+    const [activeTab, setActiveTab] = React.useState(baseRecipes[0].key);
+    const [hoverBtn, setHoverBtn] = React.useState(false);
+    const [bgOffset, setBgOffset] = React.useState({ x: 0, y: 0 });
+    const [screenWidth, setScreenWidth] = React.useState(window.innerWidth);
+    const [isProcessingImage, setIsProcessingImage] = React.useState(false);
+
+    const animationRef = React.useRef(null);
+    const targetRef = React.useRef({ x: 0, y: 0 });
+    const currentRef = React.useRef({ x: 0, y: 0 });
+    const autoAngleRef = React.useRef(0);
+    const fileInputRef = React.useRef(null);
+
+    const [newTitle, setNewTitle] = React.useState("");
+    const [newCategory, setNewCategory] = React.useState("Їжа");
+    const [newImage, setNewImage] = React.useState("");
+    const [newImageName, setNewImageName] = React.useState("");
+    const [newIngredients, setNewIngredients] = React.useState("");
+    const [newInstructions, setNewInstructions] = React.useState("");
+
+    const isMobile = screenWidth <= 768;
+    const isSmallMobile = screenWidth <= 480;
+
+    React.useEffect(() => {
+      const handleResize = () => setScreenWidth(window.innerWidth);
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    React.useEffect(() => {
+      try {
+        if (userRecipes.length > 0) {
+          localStorage.setItem("recipe_book_user_recipes", JSON.stringify(userRecipes));
+        } else {
+          localStorage.removeItem("recipe_book_user_recipes");
+        }
+      } catch (error) {
+        console.error("Не вдалося зберегти рецепти", error);
+      }
+    }, [userRecipes]);
+
+    React.useEffect(() => {
+      const animate = () => {
+        if (window.innerWidth <= 768) {
+          autoAngleRef.current += 0.012;
+          targetRef.current = {
+            x: Math.sin(autoAngleRef.current) * 10,
+            y: Math.cos(autoAngleRef.current * 0.8) * 8,
+          };
+        }
+
+        currentRef.current.x += (targetRef.current.x - currentRef.current.x) * 0.07;
+        currentRef.current.y += (targetRef.current.y - currentRef.current.y) * 0.07;
+
+        setBgOffset({ x: currentRef.current.x, y: currentRef.current.y });
+        animationRef.current = requestAnimationFrame(animate);
+      };
+
+      const handleMouseMove = (e) => {
+        if (window.innerWidth <= 768) return;
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+        const normalizedX = (e.clientX - centerX) / centerX;
+        const normalizedY = (e.clientY - centerY) / centerY;
+        targetRef.current = { x: normalizedX * 24, y: normalizedY * 18 };
+      };
+
+      const handleMouseLeave = () => {
+        if (window.innerWidth <= 768) return;
+        targetRef.current = { x: 0, y: 0 };
+      };
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseleave", handleMouseLeave);
+      animationRef.current = requestAnimationFrame(animate);
+
+      return () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseleave", handleMouseLeave);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      };
+    }, []);
+
+    const allRecipes = React.useMemo(
+      () => (showUserRecipes ? userRecipes : baseRecipes),
+      [showUserRecipes, userRecipes]
+    );
+
+    const filtered = React.useMemo(() => {
+      return allRecipes.filter((r) => {
+        const q = search.toLowerCase();
+        return (
+          r.title.toLowerCase().includes(q) ||
+          r.category.toLowerCase().includes(q) ||
+          r.ingredients.join(" ").toLowerCase().includes(q)
+        );
+      });
+    }, [allRecipes, search]);
+
+    React.useEffect(() => {
+      if (!filtered.length) return;
+      const exists = filtered.some((r) => r.key === activeTab);
+      if (!exists) setActiveTab(filtered[0].key);
+    }, [filtered, activeTab]);
+
+    const active = React.useMemo(
+      () => filtered.find((r) => r.key === activeTab) || filtered[0] || null,
+      [filtered, activeTab]
+    );
+
+    const groupedRecipes = React.useMemo(() => {
+      return filtered.reduce((acc, recipe) => {
+        if (!acc[recipe.category]) acc[recipe.category] = [];
+        acc[recipe.category].push(recipe);
+        return acc;
+      }, {});
+    }, [filtered]);
+
+    function compressImageFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const maxWidth = 1200;
+              const maxHeight = 1200;
+              let { width, height } = img;
+
+              if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+              }
+
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, width, height);
+
+              let quality = 0.82;
+              let result = canvas.toDataURL("image/jpeg", quality);
+              const maxLength = 900000;
+
+              while (result.length > maxLength && quality > 0.45) {
+                quality -= 0.07;
+                result = canvas.toDataURL("image/jpeg", quality);
+              }
+
+              resolve(result);
+            } catch (err) {
+              reject(err);
+            }
+          };
+          img.onerror = reject;
+          img.src = reader.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleImageUpload(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      if (!file.type.startsWith("image/")) {
+        alert("Оберіть файл зображення");
+        return;
+      }
+
+      const maxSize = 10 * 1024 * 1024;
+      if (file.size > maxSize) {
+        alert("Файл завеликий. Оберіть зображення до 10 МБ");
+        e.target.value = "";
+        return;
+      }
+
+      try {
+        setIsProcessingImage(true);
+        const compressed = await compressImageFile(file);
+        setNewImage(compressed);
+        setNewImageName(file.name);
+      } catch (error) {
+        console.error("Помилка обробки зображення", error);
+        alert("Не вдалося обробити зображення");
+        e.target.value = "";
+      } finally {
+        setIsProcessingImage(false);
+      }
+    }
+
+    function clearImageSelection() {
+      setNewImage("");
+      setNewImageName("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+
+    function addRecipe() {
+      if (!newTitle.trim()) {
+        alert("Введіть назву рецепта");
+        return;
+      }
+      if (isProcessingImage) {
+        alert("Зачекайте, зображення ще обробляється");
+        return;
+      }
+
+      const key = "user_" + Date.now();
+      const newRec = {
+        key,
+        title: newTitle.trim(),
+        category: newCategory,
+        image: newImage ? newImage : null,
+        ingredients: newIngredients.split(",").map((i) => i.trim()).filter(Boolean),
+        instructions: newInstructions.trim(),
+        removable: true,
+      };
+
+      setUserRecipes((prev) => [newRec, ...prev]);
+      setShowUserRecipes(true);
+      setSearch("");
+      setNewTitle("");
+      setNewCategory("Їжа");
+      setNewImage("");
+      setNewImageName("");
+      setNewIngredients("");
+      setNewInstructions("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setActiveTab(key);
+    }
+
+    function deleteRecipe(key) {
+      if (window.confirm("Видалити рецепт?")) {
+        setUserRecipes((prev) => prev.filter((r) => r.key !== key));
+      }
+    }
+
+    function switchMode() {
+      const nextShowUserRecipes = !showUserRecipes;
+      setShowUserRecipes(nextShowUserRecipes);
+      setSearch("");
+      if (nextShowUserRecipes) {
+        setActiveTab(userRecipes[0]?.key || "");
+      } else {
+        setActiveTab(baseRecipes[0]?.key || "");
+      }
+    }
+
+    const inputStyle = {
+      width: "100%",
+      padding: isMobile ? "12px 12px" : "12px 14px",
+      borderRadius: 10,
+      border: "1px solid #65a30d",
+      background: "#27272a",
+      color: "#a3e635",
+      outline: "none",
+      marginBottom: 12,
+    };
+
+    const sectionCard = {
+      background: "rgba(24, 24, 27, 0.82)",
+      borderRadius: isMobile ? 14 : 16,
+      border: "1px solid rgba(101, 163, 13, 0.35)",
+      boxShadow: "0 0 12px rgba(101, 163, 13, 0.15)",
+      position: "relative",
+      zIndex: 2,
+      backdropFilter: "blur(6px)",
+    };
+
+    const tabButtonStyle = (isActive) => ({
+      textAlign: "left",
+      padding: isMobile ? "10px 12px" : "11px 14px",
+      borderRadius: 12,
+      border: isActive
+        ? "1px solid rgba(210, 255, 130, 0.38)"
+        : "1px solid rgba(163, 230, 53, 0.08)",
+      cursor: "pointer",
+      background: isActive
+        ? "linear-gradient(135deg, rgba(132,199,29,0.96) 0%, rgba(95,156,19,0.96) 100%)"
+        : "linear-gradient(135deg, rgba(28,28,31,0.96) 0%, rgba(20,20,23,0.96) 100%)",
+      color: isActive ? "#f7ffe3" : "#f4f4f5",
+      fontWeight: isActive ? "bold" : "normal",
+      transition: "0.22s ease",
+      boxShadow: isActive
+        ? "0 8px 18px rgba(132, 199, 29, 0.22), inset 0 1px 0 rgba(255,255,255,0.14)"
+        : "0 4px 10px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.03)",
+      fontSize: isMobile ? 14 : 15,
+    });
+
+    const actionButtonStyle = {
+      padding: isMobile ? "11px 18px" : "12px 22px",
+      background:
+        "linear-gradient(135deg, rgba(132,199,29,0.95) 0%, rgba(95,156,19,0.95) 55%, rgba(69,116,10,0.98) 100%)",
+      color: "#f7ffe3",
+      border: "1px solid rgba(210, 255, 130, 0.36)",
+      borderRadius: 14,
+      cursor: "pointer",
+      fontWeight: "bold",
+      fontSize: isMobile ? 15 : 16,
+      boxShadow:
+        "0 8px 22px rgba(132, 199, 29, 0.22), inset 0 1px 0 rgba(255,255,255,0.16)",
+      width: isSmallMobile ? "100%" : "auto",
+    };
+
+    const secondaryButtonStyle = {
+      padding: isMobile ? "10px 14px" : "11px 16px",
+      background: "linear-gradient(135deg, rgba(39,39,42,0.96) 0%, rgba(24,24,27,0.96) 100%)",
+      color: "#f4f4f5",
+      border: "1px solid rgba(101, 163, 13, 0.34)",
+      borderRadius: 14,
+      cursor: "pointer",
+      fontWeight: "bold",
+      fontSize: isMobile ? 14 : 15,
+      boxShadow: "0 6px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.06)",
+      width: isSmallMobile ? "100%" : "auto",
+    };
+
+    const dangerButtonStyle = {
+      marginTop: 18,
+      padding: isMobile ? "10px 16px" : "11px 18px",
+      background:
+        "linear-gradient(135deg, rgba(220,38,38,0.96) 0%, rgba(185,28,28,0.96) 100%)",
+      color: "#fff",
+      border: "1px solid rgba(254, 202, 202, 0.22)",
+      borderRadius: 14,
+      cursor: "pointer",
+      fontWeight: "bold",
+      fontSize: isMobile ? 14 : 15,
+      boxShadow:
+        "0 8px 18px rgba(220, 38, 38, 0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
+      width: isSmallMobile ? "100%" : "auto",
+    };
+
+    const uploadAreaStyle = {
+      position: "relative",
+      width: "100%",
+      minHeight: isMobile ? 124 : 134,
+      borderRadius: 14,
+      border: "1px dashed rgba(163, 230, 53, 0.45)",
+      background:
+        "linear-gradient(135deg, rgba(39,39,42,0.96) 0%, rgba(24,24,27,0.98) 100%)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 6px 16px rgba(0,0,0,0.16)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textAlign: "center",
+      padding: isMobile ? 14 : 18,
+      marginBottom: 12,
+      overflow: "hidden",
+    };
+
+    return (
+      <div style={{ minHeight: "100vh", position: "relative", overflow: "hidden", background: "radial-gradient(circle at center, rgba(120,180,30,0.08), rgba(16,16,16,0.94) 60%)" }}>
+        <div style={{ position: "fixed", inset: "-50px", backgroundImage: "linear-gradient(rgba(8, 12, 6, 0.38), rgba(8, 12, 6, 0.48)), url('./img/bg.jpg')", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", transform: `translate3d(${bgOffset.x}px, ${bgOffset.y}px, 0) scale(${isMobile ? 1.12 : 1.08})`, transition: "transform 0.08s linear", filter: "saturate(1.02) brightness(0.72)", zIndex: 0, willChange: "transform" }} />
+        <div style={{ position: "fixed", inset: 0, background: "radial-gradient(circle at 20% 20%, rgba(163,230,53,0.10), transparent 28%), radial-gradient(circle at 80% 30%, rgba(163,230,53,0.08), transparent 25%), radial-gradient(circle at 50% 80%, rgba(163,230,53,0.06), transparent 30%)", transform: `translate3d(${bgOffset.x * -0.45}px, ${bgOffset.y * -0.45}px, 0) scale(1.03)`, transition: "transform 0.1s linear", zIndex: 1, pointerEvents: "none" }} />
+
+        <div style={{ minHeight: "100vh", padding: isMobile ? "16px 12px 24px" : "32px 20px", position: "relative", zIndex: 2 }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", color: "#eee" }}>
+            <div style={{ ...sectionCard, padding: isMobile ? 16 : 24, marginBottom: isMobile ? 14 : 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: 14, flexWrap: "wrap" }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: isSmallMobile ? 26 : isMobile ? 30 : 34, color: "#a3e635", lineHeight: 1.15 }}>Книга рецептів</h1>
+                  <p style={{ margin: "8px 0 0", color: "#d4d4d8", fontSize: isMobile ? 14 : 15, lineHeight: 1.45 }}>
+                    Зручний каталог рецептів з переглядом і додаванням власних записів
+                  </p>
+                </div>
+
+                <button
+                  onClick={switchMode}
+                  onMouseEnter={() => !isMobile && setHoverBtn(true)}
+                  onMouseLeave={() => !isMobile && setHoverBtn(false)}
+                  onTouchStart={() => setHoverBtn(true)}
+                  style={{ position: "relative", width: isMobile ? "100%" : hoverBtn ? 250 : 58, height: isMobile ? 50 : 52, padding: isMobile ? "0 16px" : hoverBtn ? "0 20px 0 10px" : "0 10px", borderRadius: isMobile ? 16 : hoverBtn ? 18 : 29, border: "1px solid rgba(210, 255, 130, 0.42)", cursor: "pointer", fontWeight: "bold", fontSize: 15, color: "#f7ffe3", background: "linear-gradient(135deg, rgba(132,199,29,0.95) 0%, rgba(95,156,19,0.95) 55%, rgba(69,116,10,0.98) 100%)", display: "flex", alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", gap: 12, overflow: "hidden", whiteSpace: "nowrap", transition: "width 0.38s ease, border-radius 0.38s ease, padding 0.38s ease, transform 0.2s ease, box-shadow 0.35s ease, filter 0.35s ease", boxShadow: "0 10px 30px rgba(132, 199, 29, 0.28), 0 0 18px rgba(163, 230, 53, 0.18), inset 0 1px 0 rgba(255,255,255,0.22)", transform: "translateY(0) scale(1)", filter: "brightness(1.02)" }}>
+                  <span style={{ position: "absolute", inset: 0, background: "linear-gradient(120deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 35%, rgba(255,255,255,0) 60%)", pointerEvents: "none" }} />
+                  <span style={{ position: "relative", zIndex: 1, minWidth: 32, width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(24, 24, 27, 0.22)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16)", fontSize: 18, lineHeight: 1, transition: "transform 0.35s ease", transform: showUserRecipes ? "rotate(90deg) scale(1.05)" : "rotate(0deg) scale(1)" }}>{showUserRecipes ? "↺" : "+"}</span>
+                  <span style={{ position: "relative", zIndex: 1, opacity: isMobile ? 1 : hoverBtn ? 1 : 0, maxWidth: isMobile ? 220 : hoverBtn ? 180 : 0, transform: isMobile ? "translateX(0)" : hoverBtn ? "translateX(0)" : "translateX(-10px)", transition: "opacity 0.28s ease, transform 0.34s ease, max-width 0.38s ease", overflow: "hidden", color: "#f7ffe3", letterSpacing: "0.2px", textShadow: "0 1px 3px rgba(0,0,0,0.18)" }}>
+                    {showUserRecipes ? "Показати базові" : "Додати рецепт"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div style={{ ...sectionCard, padding: isMobile ? 14 : 20, marginBottom: isMobile ? 14 : 20 }}>
+              <input
+                type="text"
+                placeholder="Пошук за назвою, категорією або інгредієнтами"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ ...inputStyle, marginBottom: 0, fontSize: isMobile ? 14 : 15 }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "340px 1fr", gap: isMobile ? 14 : 20, alignItems: "start" }}>
+              <div style={{ ...sectionCard, padding: isMobile ? 14 : 18, minHeight: isMobile ? "auto" : 520, order: isMobile ? 1 : 0 }}>
+                <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: isMobile ? 20 : 22, color: "#a3e635" }}>{showUserRecipes ? "Мої рецепти" : "Базові рецепти"}</h2>
+                {Object.keys(groupedRecipes).length === 0 ? (
+                  <div style={{ color: "#d4d4d8", lineHeight: 1.5, background: "#27272a", borderRadius: 12, padding: 14, fontSize: isMobile ? 14 : 15 }}>Рецептів не знайдено.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {Object.keys(groupedRecipes).map((cat) => (
+                      <div key={cat} style={{ background: "#27272a", borderRadius: 12, padding: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }}>
+                        <div style={{ fontWeight: "bold", fontSize: isMobile ? 16 : 17, color: "#a3e635", borderBottom: "1px solid #65a30d", paddingBottom: 8, marginBottom: 10 }}>{cat}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {groupedRecipes[cat].map((rec) => (
+                            <button key={rec.key} onClick={() => setActiveTab(rec.key)} style={tabButtonStyle(rec.key === activeTab)} title={rec.title}>{rec.title}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ ...sectionCard, padding: isMobile ? 14 : 20, minHeight: isMobile ? "auto" : 520, order: isMobile ? 2 : 0 }}>
+                {active ? (
+                  <div>
+                    <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: isSmallMobile ? 24 : isMobile ? 26 : 28, color: "#a3e635", lineHeight: 1.2 }}>{active.title}</h2>
+                    {active.image ? (
+                      <img
+                        src={active.image}
+                        alt={active.title}
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.style.display = "none";
+                          const placeholder = document.getElementById(`image-placeholder-${active.key}`);
+                          if (placeholder) placeholder.style.display = "flex";
+                        }}
+                        style={{ width: "100%", height: isSmallMobile ? 220 : isMobile ? 260 : 320, objectFit: "cover", borderRadius: 14, display: "block", marginBottom: 20, background: "#18181b" }}
+                      />
+                    ) : null}
+
+                    <div id={`image-placeholder-${active.key}`} style={{ width: "100%", height: isSmallMobile ? 220 : isMobile ? 260 : 320, borderRadius: 14, marginBottom: 20, background: "#18181b", display: active.image ? "none" : "flex", alignItems: "center", justifyContent: "center", color: "#a1a1aa", fontSize: 16, textAlign: "center", padding: 12 }}>
+                      📷 Зображення недоступне
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18 }}>
+                      <div style={{ background: "#27272a", borderRadius: 12, padding: isMobile ? 14 : 16 }}>
+                        <h3 style={{ marginTop: 0, color: "#a3e635", fontSize: isMobile ? 18 : 19 }}>Інгредієнти</h3>
+                        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.7, color: "#f4f4f5", fontSize: isMobile ? 14 : 15 }}>
+                          {active.ingredients.length ? active.ingredients.map((ing, i) => <li key={i}>{ing}</li>) : <li>Інгредієнти не вказані</li>}
+                        </ul>
+                      </div>
+
+                      <div style={{ background: "#27272a", borderRadius: 12, padding: isMobile ? 14 : 16 }}>
+                        <h3 style={{ marginTop: 0, color: "#a3e635", fontSize: isMobile ? 18 : 19 }}>Інструкції</h3>
+                        <p style={{ margin: 0, lineHeight: 1.7, color: "#f4f4f5", whiteSpace: "pre-line", fontSize: isMobile ? 14 : 15 }}>
+                          {active.instructions || "Інструкції не вказані"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {active.removable && (
+                      <button onClick={() => deleteRecipe(active.key)} style={dangerButtonStyle}>Видалити рецепт</button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ height: "100%", minHeight: isMobile ? 180 : 480, display: "flex", alignItems: "center", justifyContent: "center", color: "#d4d4d8", fontSize: isMobile ? 16 : 18, textAlign: "center", padding: 12 }}>
+                    Оберіть рецепт зліва або додайте новий
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ ...sectionCard, padding: isMobile ? 14 : 20, marginTop: isMobile ? 14 : 20 }}>
+              <h2 style={{ marginTop: 0, marginBottom: 16, color: "#a3e635", fontSize: isMobile ? 20 : 24 }}>Додати новий рецепт</h2>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
+                <div>
+                  <input type="text" placeholder="Назва" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} style={inputStyle} />
+                  <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={inputStyle}>
+                    <option>Їжа</option>
+                    <option>Напій</option>
+                    <option>Десерт</option>
+                  </select>
+
+                  <div style={uploadAreaStyle}>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                    />
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, pointerEvents: "none" }}>
+                      <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(132,199,29,0.14)", border: "1px solid rgba(163,230,53,0.28)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#d9f99d", boxShadow: "0 0 18px rgba(132,199,29,0.12)" }}>⬆</div>
+                      <div style={{ color: "#f4f4f5", fontWeight: "bold", fontSize: isMobile ? 14 : 15, lineHeight: 1.4 }}>
+                        {isProcessingImage ? "Обробка зображення..." : "Натисніть, щоб вибрати зображення"}
+                      </div>
+                      <div style={{ color: "#a1a1aa", fontSize: isMobile ? 12 : 13, lineHeight: 1.4 }}>
+                        JPG, PNG, WEBP до 10 МБ
+                      </div>
+                    </div>
+                  </div>
+
+                  {newImage && (
+                    <div style={{ background: "#27272a", borderRadius: 14, border: "1px solid rgba(101, 163, 13, 0.28)", padding: 12, marginBottom: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }}>
+                      <div style={{ display: "flex", flexDirection: isSmallMobile ? "column" : "row", gap: 12, alignItems: isSmallMobile ? "stretch" : "center" }}>
+                        <img src={newImage} alt="Попередній перегляд" style={{ width: isSmallMobile ? "100%" : 110, height: isSmallMobile ? 170 : 78, objectFit: "cover", borderRadius: 12, background: "#18181b", flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: "#d9f99d", fontWeight: "bold", marginBottom: 6, fontSize: isMobile ? 14 : 15 }}>Зображення вибрано</div>
+                          <div style={{ color: "#d4d4d8", fontSize: isMobile ? 13 : 14, wordBreak: "break-word", lineHeight: 1.5 }}>{newImageName || "Локальний файл"}</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 12 }}>
+                        <button type="button" onClick={clearImageSelection} style={secondaryButtonStyle}>Прибрати зображення</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <textarea placeholder="Інгредієнти через кому" value={newIngredients} onChange={(e) => setNewIngredients(e.target.value)} rows={4} style={{ ...inputStyle, resize: "vertical", minHeight: isMobile ? 96 : 108 }} />
+                  <textarea placeholder="Інструкції" value={newInstructions} onChange={(e) => setNewInstructions(e.target.value)} rows={5} style={{ ...inputStyle, resize: "vertical", minHeight: isMobile ? 120 : 132, marginBottom: 0 }} />
+                </div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <button onClick={addRecipe} style={{ ...actionButtonStyle, opacity: isProcessingImage ? 0.75 : 1 }}>
+                  {isProcessingImage ? "Обробка..." : "Додати"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function downloadAppPackage(){
+    const a = document.createElement("a");
+    a.href = "app-release.apk";
+    a.download = "RecipeBook.apk";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<App />);
+</script>
+</body>
+</html>
